@@ -1,0 +1,17 @@
+# Example local configuration for darkweb-crawler
+# NOTE: backend_base_url should point to your running DarkIntel backend API.
+# When using Docker on macOS/Windows, host.docker.internal refers to the host machine.
+
+backend_base_url = "http://host.docker.internal:8000/v1"
+backend_api_token = "CHANGE_ME_LOCAL_TOKEN"
+
+[scheduler]
+concurrency = 4
+request_timeout_seconds = 15
+
+[[sources]]
+id = "9ca59a41-8474-4203-83a2-f5c5e8bdd516"
+name = "Example Ransom Blog"
+base_url = "https://example.com/"
+parser_type = "BASIC"
+crawl_interval_minutes = 60
