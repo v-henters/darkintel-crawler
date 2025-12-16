@@ -1,4 +1,4 @@
-# darkweb-crawler
+# darkintel-crawler
 
 DarkIntel 백엔드의 **ingest API**(`/v1/ingest/raw`)로 외부(OSINT/다크웹/랜섬웨어 유출 포스트 등) 데이터를 전달하기 위한 크롤러 러너입니다.
 
