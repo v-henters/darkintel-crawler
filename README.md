@@ -44,7 +44,7 @@ docker compose up
 예시 설정을 복사해 수정:
 
 ```
-cp config.example.toml config.toml
+cp config.toml config.toml
 ```
 
 필수 수정값:

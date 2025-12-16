@@ -36,6 +36,10 @@ dependencies {
     // AWS SDK v2 for DynamoDB
     implementation platform('software.amazon.awssdk:bom:2.25.56')
     implementation 'software.amazon.awssdk:dynamodb'
+    // AWS SDK v2 for Lambda (Admin API needs to invoke crawler Lambda)
+    implementation 'software.amazon.awssdk:lambda'
+    // AWS SDK v2 for SNS
+    implementation 'software.amazon.awssdk:sns'
 
     // Redis client (Lettuce)
     implementation 'io.lettuce:lettuce-core:6.5.5.RELEASE'
@@ -46,6 +50,8 @@ dependencies {
 
     // AWS Lambda Java Core
     implementation 'com.amazonaws:aws-lambda-java-core:1.2.3'
+    // AWS Lambda Events (API Gateway proxy events)
+    implementation 'com.amazonaws:aws-lambda-java-events:3.11.4'
 }
 
 test {

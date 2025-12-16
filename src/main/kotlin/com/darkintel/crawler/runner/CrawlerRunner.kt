@@ -3,6 +3,7 @@ package com.darkintel.crawler.runner
 import com.darkintel.crawler.config.AppConfig
 import com.darkintel.crawler.config.SourceConfig
 import com.darkintel.crawler.dynamodb.DocumentRepository
+import com.darkintel.crawler.dynamodb.SourceScheduleRepository
 import com.darkintel.crawler.dynamodb.SourceStateRepository
 import com.darkintel.crawler.client.IngestApiClient
 import com.darkintel.crawler.model.SourceState
@@ -11,11 +12,16 @@ import com.darkintel.crawler.redis.DistributedLockManager
 import com.darkintel.crawler.redis.RateLimiter
 import com.darkintel.crawler.util.getLogger
 import com.darkintel.crawler.util.retry
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.time.Instant
+import java.time.ZoneOffset
+import com.darkintel.crawler.sns.SnsPublisher
 
 private object CrawlerRunnerLogger
 
@@ -24,11 +30,25 @@ class CrawlerRunner(
     private val sourceStateRepository: SourceStateRepository,
     private val documentRepository: DocumentRepository,
     private val ingestApiClient: IngestApiClient,
+    private val sourceScheduleRepository: SourceScheduleRepository? = null,
     private val rateLimiter: RateLimiter? = null,
-    private val lockManager: DistributedLockManager? = null
+    private val lockManager: DistributedLockManager? = null,
+    private val snsPublisher: SnsPublisher? = null
 ) {
 
     private val logger = getLogger(CrawlerRunnerLogger::class)
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    suspend fun runAll() = runOnce()
+
+    suspend fun runSingle(sourceId: String) {
+        val source = config.sources.find { it.id == sourceId }
+        if (source == null) {
+            logger.warn("Requested runSingle for unknown source: {}", sourceId)
+            return
+        }
+        crawlSingleSource(source)
+    }
 
     suspend fun runOnce() = coroutineScope {
         val concurrency = config.scheduler.concurrency.coerceAtLeast(1)
@@ -57,6 +77,39 @@ class CrawlerRunner(
         }
 
         try {
+            // 스케줄 저장소가 제공되는 경우 스케줄을 확인한다.
+            if (sourceScheduleRepository != null) {
+                val scheduleConfig = retry { sourceScheduleRepository.get(sourceId) }
+
+                if (scheduleConfig != null && !scheduleConfig.enabled) {
+                    logger.info("Skipping source {} because it is disabled by schedule config", sourceId)
+                    return
+                }
+
+                if (scheduleConfig != null &&
+                    scheduleConfig.allowedStartHourUtc != null &&
+                    scheduleConfig.allowedEndHourUtc != null
+                ) {
+                    val currentHour = Instant.now().atOffset(ZoneOffset.UTC).hour
+                    val start = scheduleConfig.allowedStartHourUtc
+                    val end = scheduleConfig.allowedEndHourUtc
+
+                    val withinWindow = if (start <= end) {
+                        currentHour in start until end
+                    } else {
+                        (currentHour >= start) || (currentHour < end)
+                    }
+
+                    if (!withinWindow) {
+                        logger.info(
+                            "Skipping source {} because current UTC hour {} is outside allowed window [{}, {})",
+                            sourceId, currentHour, start, end
+                        )
+                        return
+                    }
+                }
+            }
+
             // 소스 단위 레이트 리밋 체크
             rateLimiter?.checkAndConsumeOrThrow(sourceId)
             logger.info("Starting crawl for source {} ({})", sourceId, source.name)
@@ -76,6 +129,13 @@ class CrawlerRunner(
                 if (!isNew) {
                     // 중복 문서에 대한 과도한 로그를 피하기 위해 건너뛴다.
                     continue
+                }
+
+                // Publish to SNS asynchronously (do not interrupt flow on failure)
+                snsPublisher?.let { publisher ->
+                    backgroundScope.launch {
+                        publisher.publishDoc(doc, source.name)
+                    }
                 }
 
                 // 정규화된 문서를 인제스트 API로 전송

@@ -9,7 +9,7 @@ import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
 import java.time.Instant
 
 class DynamoDbSourceStateRepository(
-    private val tableName: String = DynamoDbClientProvider.SOURCE_STATE_TABLE
+    private val tableName: String
 ) : SourceStateRepository {
 
     private val client = DynamoDbClientProvider.client

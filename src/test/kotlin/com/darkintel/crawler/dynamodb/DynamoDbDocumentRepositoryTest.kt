@@ -54,7 +54,7 @@ class DynamoDbDocumentRepositoryTest {
         // Ensure updateItem is not accidentally called
         // If it is, verify below will catch it
 
-        val repository = DynamoDbDocumentRepository()
+        val repository = DynamoDbDocumentRepository(tableName = "test-documents-table")
         val doc = sampleDoc()
 
         // Act
@@ -73,7 +73,7 @@ class DynamoDbDocumentRepositoryTest {
             .message("already exists").build()
         every { mockClient.updateItem(any<UpdateItemRequest>()) } returns mockk<UpdateItemResponse>()
 
-        val repository = DynamoDbDocumentRepository()
+        val repository = DynamoDbDocumentRepository(tableName = "test-documents-table")
         val doc = sampleDoc()
 
         // Act

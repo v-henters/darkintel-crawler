@@ -1,10 +1,13 @@
+# Gradle
 .gradle
+.gradle/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
 
 ### IntelliJ IDEA ###
+.idea/
 .idea/modules.xml
 .idea/jarRepositories.xml
 .idea/compiler.xml
@@ -43,3 +46,37 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+############################################
+# Terraform local state and cache
+############################################
+.terraform/
+.terraform.*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Sensitive Terraform variable files
+*.tfvars
+*.tfvars.json
+
+############################################
+# Local env / secrets
+############################################
+.env
+*.env.local
+*.local.yml
+# Project-specific secret-bearing configs (use template files instead)
+config.toml
+config.lambda.toml
+
+############################################
+# Lambda build outputs
+############################################
+build/lambda/*.zip
+
+############################################
+# Local binary installers
+############################################
+infra/AWSCLIV2.pkg

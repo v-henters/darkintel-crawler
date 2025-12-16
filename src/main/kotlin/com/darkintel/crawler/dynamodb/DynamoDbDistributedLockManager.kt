@@ -13,8 +13,8 @@ import java.time.Instant
 import java.util.UUID
 
 class DynamoDbDistributedLockManager(
+    private val tableName: String,
     private val client: DynamoDbClient = DynamoDbClientProvider.client,
-    private val tableName: String = DynamoDbClientProvider.LOCKS_TABLE,
     private val lockTtlSeconds: Long = 300,
     private val instanceId: String = UUID.randomUUID().toString()
 ) : DistributedLockManager {
@@ -39,6 +39,9 @@ class DynamoDbDistributedLockManager(
             .build()
 
         return@withContext try {
+            val envRegion = System.getenv("AWS_REGION") ?: System.getenv("AWS_DEFAULT_REGION")
+            val clientRegion = envRegion ?: "unknown"
+            logger.info("Using DynamoDB lock table: {}, region: {}", tableName, clientRegion)
             client.putItem(request)
             logger.info("DynamoDB lock acquired for source {} by {}", sourceId, instanceId)
             true

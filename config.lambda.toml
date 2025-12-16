@@ -1,0 +1,20 @@
+# AWS Lambda 환경용 설정
+backend_base_url = "http://darkintel.vhunters.com//v1"
+backend_api_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3YTY1NDFmMy0yYzk1LTQ0ZWYtOWZmOS0yZTlmYTgxNzQxYWQiLCJleHAiOjE3NjQ4Mzg5MjF9.antt17K0VHRvY8wewEpe69rRRIXl3jRg4vBQkBxTQuI"
+
+[scheduler]
+concurrency = 3
+request_timeout_seconds = 15
+
+[dynamodb]
+source_state_table = "darkweb-crawler_source_state"
+documents_table    = "darkweb-crawler_documents"
+locks_table        = "darkweb-crawler_locks"
+schedule_table     = "darkweb-crawler_schedule"
+
+[[sources]]
+id = "ransomlive-001"
+name = "Ransomware Live"
+base_url = "https://www.ransomware.live"
+parser_type = "RANSOMLIVE"
+crawl_interval_minutes = 10

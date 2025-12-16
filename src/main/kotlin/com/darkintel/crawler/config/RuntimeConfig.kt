@@ -6,5 +6,6 @@ data class RuntimeConfig(
     val redisUri: String?,
     val logLevel: String?,
     val useRedisRateLimiter: Boolean,
-    val useRedisLock: Boolean
+    val useRedisLock: Boolean,
+    val snsTopicArn: String?
 )

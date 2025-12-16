@@ -3,6 +3,7 @@ package com.darkintel.crawler.lambda
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.lambda.runtime.RequestHandler
 import com.darkintel.crawler.runCrawlerOnce
+import com.darkintel.crawler.dynamodb.DynamoDbClientProvider
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 
@@ -21,12 +22,16 @@ class CrawlerLambdaHandler : RequestHandler<Map<String, Any>, String> {
         logger.info("CrawlerLambdaHandler invoked. RequestId={}", context.awsRequestId)
         logger.info("Starting darkweb-crawler run (environment: Lambda)")
 
+        // Initialize DynamoDB client for Lambda
+        DynamoDbClientProvider.init(System.getenv("AWS_REGION"))
+
         // Lambda 환경에서는 일반적으로 CLI 인자 대신 환경 변수를 사용해 설정을 전달한다.
         val args: Array<String> = emptyArray()
+        val sourceId: String? = input["sourceId"] as? String
 
         return try {
             runBlocking {
-                runCrawlerOnce(args)
+                runCrawlerOnce(args, sourceId)
             }
             "OK"
         } catch (e: Exception) {

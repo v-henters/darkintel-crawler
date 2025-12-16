@@ -12,6 +12,7 @@ object RuntimeConfigLoader {
         val awsRegion = env["DARKWEB_AWS_REGION"]
         val redisUri = env["DARKWEB_REDIS_URI"]
         val logLevel = env["DARKWEB_LOG_LEVEL"]
+        val snsTopicArn = env["SNS_TOPIC_ARN"]
 
         val useRedisRateLimiter = parseBooleanEnv(env, "DARKWEB_USE_REDIS_RATELIMITER", default = false)
         val useRedisLock = parseBooleanEnv(env, "DARKWEB_USE_REDIS_LOCK", default = false)
@@ -22,7 +23,8 @@ object RuntimeConfigLoader {
             redisUri = redisUri,
             logLevel = logLevel,
             useRedisRateLimiter = useRedisRateLimiter,
-            useRedisLock = useRedisLock
+            useRedisLock = useRedisLock,
+            snsTopicArn = snsTopicArn
         )
     }
 

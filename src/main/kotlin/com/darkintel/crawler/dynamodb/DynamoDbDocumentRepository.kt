@@ -10,7 +10,7 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest
 import java.time.Instant
 
 class  DynamoDbDocumentRepository(
-    private val tableName: String = DynamoDbClientProvider.DOCUMENTS_TABLE
+    private val tableName: String
 ) : DocumentRepository {
 
     private val client = DynamoDbClientProvider.client

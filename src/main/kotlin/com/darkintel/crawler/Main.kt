@@ -7,6 +7,7 @@ import com.darkintel.crawler.dynamodb.DynamoDbDocumentRepository
 import com.darkintel.crawler.dynamodb.DynamoDbClientProvider
 import com.darkintel.crawler.dynamodb.DynamoDbSourceStateRepository
 import com.darkintel.crawler.dynamodb.DynamoDbDistributedLockManager
+import com.darkintel.crawler.dynamodb.DynamoDbSourceScheduleRepository
 import com.darkintel.crawler.redis.RedisDistributedLockManager
 import com.darkintel.crawler.redis.RedisRateLimiter
 import com.darkintel.crawler.redis.RedisClientProvider
@@ -16,10 +17,12 @@ import com.darkintel.crawler.redis.RateLimiter
 import com.darkintel.crawler.runner.CrawlerRunner
 import com.darkintel.crawler.util.getLogger
 import kotlinx.coroutines.runBlocking
+import com.darkintel.crawler.sns.SnsClientProvider
+import com.darkintel.crawler.sns.SnsPublisher
 
 private object MainLogger
 
-suspend fun runCrawlerOnce(args: Array<String>) {
+suspend fun runCrawlerOnce(args: Array<String>, sourceId: String? = null) {
     val runtimeConfig = RuntimeConfigLoader.load(args)
     val logger = getLogger(MainLogger::class)
 
@@ -43,8 +46,15 @@ suspend fun runCrawlerOnce(args: Array<String>) {
     logger.info("Total sources: {}", config.sources.size)
     logger.info("Concurrency level: {}", config.scheduler.concurrency)
 
-    val sourceStateRepository = DynamoDbSourceStateRepository()
-    val documentRepository = DynamoDbDocumentRepository()
+    val sourceStateRepository = DynamoDbSourceStateRepository(
+        tableName = config.dynamodb.sourceStateTable
+    )
+    val documentRepository = DynamoDbDocumentRepository(
+        tableName = config.dynamodb.documentsTable
+    )
+    val scheduleRepository = DynamoDbSourceScheduleRepository(
+        tableName = config.dynamodb.scheduleTable
+    )
 
     val ingestApiClient = HttpIngestApiClient(
         backendBaseUrl = config.backendBaseUrl,
@@ -62,25 +72,53 @@ suspend fun runCrawlerOnce(args: Array<String>) {
         if (runtimeConfig.useRedisLock) {
             RedisDistributedLockManager(lockTtlSeconds = 60)
         } else {
-            DynamoDbDistributedLockManager(lockTtlSeconds = 300)
+            DynamoDbDistributedLockManager(
+                tableName = config.dynamodb.locksTable,
+                lockTtlSeconds = 300
+            )
         }
 
     logger.info("RateLimiter implementation: {}", rateLimiter?.javaClass?.simpleName ?: "none")
     logger.info("LockManager implementation: {}", lockManager?.javaClass?.simpleName ?: "none")
+    logger.info(
+        "Using DynamoDB tables: source_state={}, documents={}, locks={}, schedule={}",
+        config.dynamodb.sourceStateTable,
+        config.dynamodb.documentsTable,
+        config.dynamodb.locksTable,
+        config.dynamodb.scheduleTable
+    )
+
+    // Initialize SNS publisher if topic ARN is provided
+    val snsPublisher: SnsPublisher? = runtimeConfig.snsTopicArn?.takeIf { it.isNotBlank() }?.let { topicArn ->
+        SnsClientProvider.init(runtimeConfig.awsRegion)
+        SnsPublisher(topicArn) { SnsClientProvider.client }
+    }
 
     val runner = CrawlerRunner(
         config = config,
         sourceStateRepository = sourceStateRepository,
         documentRepository = documentRepository,
         ingestApiClient = ingestApiClient,
+        sourceScheduleRepository = scheduleRepository,
         rateLimiter = rateLimiter,
-        lockManager = lockManager
+        lockManager = lockManager,
+        snsPublisher = snsPublisher
     )
 
-    runner.runOnce()
+    if (sourceId != null) {
+        logger.info("Run-now for single source: {}", sourceId)
+        runner.runSingle(sourceId)
+    } else {
+        runner.runAll()
+    }
     logger.info("Completed one run successfully.")
 }
 
-fun main(args: Array<String>) = runBlocking {
-    runCrawlerOnce(args)
+fun main(args: Array<String>) {
+    // Initialize DynamoDB client with region from environment, if provided (also re-initialized later if overridden by runtime config)
+    DynamoDbClientProvider.init(System.getenv("AWS_REGION"))
+
+    runBlocking {
+        runCrawlerOnce(args)
+    }
 }

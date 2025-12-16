@@ -4,12 +4,6 @@ import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
 
 object DynamoDbClientProvider {
-
-    // 테이블 이름 (환경에 맞게 필요 시 변경)
-    const val SOURCE_STATE_TABLE = "darkintel_crawler_source_state"
-    const val DOCUMENTS_TABLE = "darkintel_crawler_documents"
-    const val LOCKS_TABLE = "darkintel_crawler_locks"
-
     @Volatile
     private var _client: DynamoDbClient? = null
 
