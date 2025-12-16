@@ -1,154 +1,110 @@
-# darkintel-crawler
+# darkweb-crawler
 
-DarkIntel 백엔드의 **ingest API**로 데이터를 보내기 위한 다크웹 크롤러입니다.
+DarkIntel 백엔드의 **ingest API**(`/v1/ingest/raw`)로 외부(OSINT/다크웹/랜섬웨어 유출 포스트 등) 데이터를 전달하기 위한 크롤러 러너입니다.
 
-- 정의된 여러 소스를 순회하며 HTML을 가져오고
-- 내용을 파싱하여 **정규화된 문서 모델**로 변환한 뒤
-- **DynamoDB**에 크롤 상태·문서 중복 여부를 저장하고
-- (옵션) **Redis**를 이용해 레이트 리밋/분산 락을 수행하며
-- 최종적으로 **DarkIntel /v1/ingest/raw** API로 전송합니다.
+이 프로젝트는 **서버리스 아키텍처(Lambda + EventBridge + DynamoDB PAY_PER_REQUEST)** 를 기반으로,
+운영 비용을 최소화하면서도 주기 실행·중복 방지·상태 관리가 가능하도록 설계되었습니다.
 
-로컬 Docker 환경, 단순 JVM 실행, AWS Lambda 같은 배치 실행 환경에서 돌릴 수 있도록 설계된 경량형 크롤링 러너입니다.
+---
 
-## 주요 기능
+## 무엇을 하는가
 
-- TOML 기반 **멀티 소스 크롤링**
-- HTML 파싱(BASIC)
-- 정규화 문서 전달 → ingest API
-- DynamoDB 문서 중복 체크
-- DynamoDB 소스 상태 저장
-- Redis 기반 RateLimiter / Distributed Lock (옵션)
-- Fatal / Retriable 예외 분리 및 재시도 로직
+- 설정(TOML)에 정의된 여러 소스를 순회하며 페이지를 수집하고
+- 소스별 파서(`parser_type`)로 필요한 데이터만 추출·정규화한 뒤
+- DynamoDB에 소스 상태 / 문서 중복 / 락 / 스케줄 정보를 저장하고
+- 최종적으로 DarkIntel 백엔드의 ingest API로 데이터를 전송합니다.
 
-## 로컬 Docker 실행
+---
 
-### 사전 준비
-- Docker / Docker Compose
+## 현재 실행 방식 요약
 
-### 실행 절차
+- **자동 실행 (스케줄)**  
+  EventBridge가 주기적으로 `darkweb-crawler-runner` Lambda를 호출
 
-#### 1. 이미지 및 fat JAR 빌드
+- **수동 실행 (즉시 실행)**  
+  Admin API Lambda(HTTP API)가 crawler Lambda를 호출하여 즉시 실행
 
-```
-docker compose build
-```
+---
 
-#### 2. 전체 스택 실행 (crawler + Redis + DynamoDB Local)
+## 구성 요소
 
-```
-docker compose up
-```
+### Lambda
 
-### 설정 파일
+- **Crawler Lambda**
+  - 이름: `darkweb-crawler-runner`
+  - 역할: 크롤링 실행, 중복 체크, 상태 저장, ingest API 호출
+  - Handler: `com.darkintel.crawler.lambda.CrawlerLambdaHandler::handleRequest`
 
-예시 설정을 복사해 수정:
+- **Admin API Lambda**
+  - 이름: `darkweb-crawler-admin-api`
+  - 역할: 즉시 실행(run-now), 스케줄 관리
+  - Handler: `com.darkintel.crawler.lambda.AdminApiLambdaHandler::handleRequest`
 
-```
-cp config.toml config.toml
-```
+### DynamoDB (PAY_PER_REQUEST)
 
-필수 수정값:
+| 테이블명 | 역할 |
+|--------|------|
+| darkweb-crawler_source_state | 소스별 크롤링 상태 |
+| darkweb-crawler_documents | 문서 중복 체크 |
+| darkweb-crawler_locks | 분산 락 |
+| darkweb-crawler_schedule | 소스별 실행 스케줄 |
 
-```toml
-backend_base_url = "https://your-darkintel-backend/v1"
-backend_api_token = "YOUR_TOKEN_HERE"
-```
+---
 
-크롤러 컨테이너는 `/app/config.toml`을 찾습니다.  
-필요하면 compose의 마운트 경로를 `config.toml`로 변경하세요.
+## 설정 파일
 
-fat JAR는 다음 경로에 생성됩니다:
+### 로컬 실행용: `config.toml`
 
-```
-build/libs/darkweb-crawler-all.jar
+```bash
+java -jar build/libs/darkweb-crawler-all.jar ./config.toml
 ```
 
-## Docker 사용 시 자주 쓰는 명령
+### Lambda 실행용: `config.lambda.toml`
 
+Lambda ZIP 내부 `/var/task/config.lambda.toml` 경로에 위치해야 합니다.
+
+---
+
+## 로컬 실행
+
+```bash
+./gradlew shadowJar
+java -jar build/libs/darkweb-crawler-all.jar ./config.toml
 ```
-docker compose build --no-cache
-docker compose logs -f darkweb-crawler
-docker compose down
-```
 
-## Docker 없이 실행
+---
 
-### 빌드
+## AWS Lambda 배포 요약
 
-```
+1. JAR 빌드
+```bash
 ./gradlew shadowJar
 ```
 
-### 실행
-
-```
-java -jar build/libs/darkweb-crawler-all.jar /path/to/config.toml
-```
-
-## config.toml 예시
-
-```toml
-backend_base_url = "https://your-darkintel-backend/v1"
-backend_api_token = "YOUR_TOKEN_HERE"
-
-[scheduler]
-concurrency = 8
-request_timeout_seconds = 15
-
-[[sources]]
-id = "9ca59a41-8474-4203-83a2-f5c5e8bdd516"
-name = "Demo Ransom Blog"
-base_url = "http://example.com/leak-demo"
-parser_type = "BASIC"
-crawl_interval_minutes = 60
+2. ZIP 생성
+```bash
+mkdir -p build/lambda
+zip -j build/lambda/darkweb-crawler-crawler.zip build/libs/darkweb-crawler-all.jar config.lambda.toml
+zip -j build/lambda/darkweb-crawler-admin-api.zip build/libs/darkweb-crawler-all.jar config.lambda.toml
 ```
 
-## 설정 설명 요약
-
-| 필드 | 설명 |
-|------|------|
-| backend_base_url | ingest API의 base URL |
-| backend_api_token | Bearer 인증 토큰 |
-| scheduler.concurrency | 병렬 크롤링 수 |
-| scheduler.request_timeout_seconds | HTTP timeout |
-| sources | 크롤링할 개별 소스 목록 |
-
-## 환경 변수 (런타임 오버라이드)
-
-| 환경 변수 | 설명 |
-|----------|------|
-| DARKWEB_CONFIG_PATH | 설정 파일 경로 |
-| DARKWEB_AWS_REGION | AWS 리전 |
-| DARKWEB_REDIS_URI | Redis URI |
-| DARKWEB_USE_REDIS_RATELIMITER | Redis 레이트리미터 사용 여부 |
-| DARKWEB_USE_REDIS_LOCK | Redis 락 사용 여부 |
-
-Redis 없는 저비용 AWS 구성:
-
-```
-DARKWEB_USE_REDIS_RATELIMITER=false
-DARKWEB_USE_REDIS_LOCK=false
+3. Terraform 적용
+```bash
+cd infra
+terraform init
+terraform apply
 ```
 
-## DynamoDB 테이블 구성
+---
 
-| 테이블명 | 역할 |
-|---------|------|
-| darkintel_crawler_source_state | 소스별 크롤 성공/실패 상태 |
-| darkintel_crawler_documents | 문서 중복 여부 체크 |
-| darkintel_crawler_locks | DynamoDB 기반 분산 락 |
+## 데이터 저장 위치
 
-## AWS 배포 전략
+- DynamoDB: 상태 / 중복 / 락 / 스케줄
+- DarkIntel Backend DB: 크롤링 결과(RawDocument, Incident, Alert)
 
-### 저비용 운영
+---
 
-- Lambda + EventBridge 스케줄러
-- DynamoDB 온디맨드
-- Redis/ElastiCache 없음
-- NAT Gateway 필요 없음
+## 참고
 
-### 고트래픽 운영
-
-- ECS Fargate 서비스로 전환
-- 옵션: ElastiCache Redis (RateLimiter/Lock 전용)
-- 동일 코드 그대로 사용 가능
+- 운영 시 실제 사이트에서 직접 크롤링
+- Redis 없이 DynamoDB 락으로 동시성 제어
