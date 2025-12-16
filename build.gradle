@@ -1,0 +1,73 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.2.20'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'org.example'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.jetbrains.kotlin:kotlin-test'
+    // JUnit 5 (Jupiter) and MockK for testing
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testImplementation 'io.mockk:mockk:1.13.10'
+    // Coroutines test utilities for runTest
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0'
+    implementation 'com.moandjiezana.toml:toml4j:0.7.2'
+    // Ktor HTTP client (CIO engine) and useful plugins
+    implementation 'io.ktor:ktor-client-cio:3.0.1'
+    implementation 'io.ktor:ktor-client-content-negotiation:3.0.1'
+    implementation 'io.ktor:ktor-serialization-kotlinx-json:3.0.1'
+    implementation 'io.ktor:ktor-client-logging:3.0.1'
+    implementation 'io.ktor:ktor-client-core:3.0.1'
+
+    // Kotlinx
+    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0'
+
+    // Jsoup for HTML parsing
+    implementation 'org.jsoup:jsoup:1.17.2'
+
+    // AWS SDK v2 for DynamoDB
+    implementation platform('software.amazon.awssdk:bom:2.25.56')
+    implementation 'software.amazon.awssdk:dynamodb'
+    // AWS SDK v2 for Lambda (Admin API needs to invoke crawler Lambda)
+    implementation 'software.amazon.awssdk:lambda'
+    // AWS SDK v2 for SNS
+    implementation 'software.amazon.awssdk:sns'
+
+    // Redis client (Lettuce)
+    implementation 'io.lettuce:lettuce-core:6.5.5.RELEASE'
+
+    // Logging - SLF4J API and Logback implementation
+    implementation 'org.slf4j:slf4j-api:2.0.16'
+    runtimeOnly 'ch.qos.logback:logback-classic:1.5.12'
+
+    // AWS Lambda Java Core
+    implementation 'com.amazonaws:aws-lambda-java-core:1.2.3'
+    // AWS Lambda Events (API Gateway proxy events)
+    implementation 'com.amazonaws:aws-lambda-java-events:3.11.4'
+}
+
+test {
+    useJUnitPlatform()
+}
+kotlin {
+    jvmToolchain(21)
+}
+
+application {
+    mainClass = 'com.darkintel.crawler.MainKt'
+}
+
+// Configure ShadowJar to produce a single runnable fat JAR
+tasks.withType(com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar).configureEach {
+    archiveBaseName.set('darkweb-crawler')
+    archiveClassifier.set('all')
+    archiveVersion.set('') // No version in the filename
+}

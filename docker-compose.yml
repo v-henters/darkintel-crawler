@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    ports:
+      - "8000:8000"
+
+  darkweb-crawler:
+    build: .
+    depends_on:
+      - redis
+      - dynamodb-local
+    environment:
+      DARKWEB_CONFIG_PATH: "/app/config.toml"
+      DARKWEB_REDIS_URI: "redis://redis:6379"
+      DARKWEB_AWS_REGION: "us-east-1"
+      AWS_ACCESS_KEY_ID: "dummy"
+      AWS_SECRET_ACCESS_KEY: "dummy"
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+    command: ["java", "-jar", "/app/darkweb-crawler-all.jar", "/app/config.toml"]
